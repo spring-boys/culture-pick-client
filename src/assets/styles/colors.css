@@ -1,0 +1,17 @@
+* {
+  font-family: 'Pretendard', sans-serif;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --color-primary: #52b788;
+  --color-primary-soft: #f0faf4;
+  --color-primary-border: #b7e4c7;
+  --color-text: #252525;
+  --color-muted: #777;
+  --color-line: #e7e7e7;
+  --color-bg: #f6f7fb;
+  --color-card: #ffffff;
+}
