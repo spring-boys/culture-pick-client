@@ -25,6 +25,11 @@ const router = createRouter({
       component: () => import('@/views/OAuthCallbackView.vue'),
     },
     {
+      path: '/cultures/:id',
+      name: 'culture-detail',
+      component: () => import('@/views/CultureDetailView.vue'),
+    },
+    {
       path: '/chat-rooms/:chatRoomId',
       name: 'chat-room',
       component: () => import('@/views/ChatRoomView.vue'),

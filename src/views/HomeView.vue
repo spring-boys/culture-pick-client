@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed, watch, onMounted, triggerRef } from 'vue'
+import { useRouter } from 'vue-router'
 import { getCalendar, getDayList } from '@/services/culture'
 import { addBookmark, removeBookmark } from '@/services/bookmark'
 import { useAuthStore } from '@/stores/auth'
+
+const router = useRouter()
 
 const authStore = useAuthStore()
 
@@ -280,7 +283,11 @@ onMounted(() => {
           <div class="event-list">
             <span v-if="cell.cultures.length === 0" class="empty-day">등록된 문화행사 없음</span>
             <div v-for="culture in cell.cultures" :key="culture.id" class="event-chip">
-              <span class="event-title">{{ culture.title }}</span>
+              <button
+                type="button"
+                class="event-title"
+                @click="router.push({ name: 'culture-detail', params: { id: culture.id } })"
+              >{{ culture.title }}</button>
               <button
                 type="button"
                 class="bookmark-mini"
@@ -316,7 +323,13 @@ onMounted(() => {
           <article v-for="item in modalItems" :key="item.id" class="modal-event-card">
             <img :src="item.thumbnail || ''" :alt="`${item.title} 썸네일`" />
             <div class="modal-event-info">
-              <h3>{{ item.title }}</h3>
+              <h3>
+                <button
+                  type="button"
+                  class="modal-title-button"
+                  @click="closeModal(); router.push({ name: 'culture-detail', params: { id: item.id } })"
+                >{{ item.title }}</button>
+              </h3>
               <p>{{ item.category }} · {{ item.area }} {{ item.sigungu }}</p>
               <p>{{ item.startDate }} ~ {{ item.endDate }}</p>
               <p>{{ item.place }}</p>
@@ -540,6 +553,16 @@ onMounted(() => {
   text-overflow: ellipsis;
   color: #333;
   font-size: 12px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.event-title:hover {
+  color: var(--color-primary);
 }
 
 .bookmark-mini {
@@ -660,6 +683,22 @@ onMounted(() => {
 .modal-event-info h3 {
   margin: 0 0 8px;
   font-size: 17px;
+}
+
+.modal-title-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modal-title-button:hover {
+  color: var(--color-primary);
 }
 
 .modal-event-info p {
