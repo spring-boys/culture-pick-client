@@ -24,6 +24,12 @@ const router = createRouter({
       path: '/oauth/callback',
       component: () => import('@/views/OAuthCallbackView.vue'),
     },
+    {
+      path: '/chat-rooms/:chatRoomId',
+      name: 'chat-room',
+      component: () => import('@/views/ChatRoomView.vue'),
+      meta: { requiresAuth: true },
+    }
   ],
 })
 
