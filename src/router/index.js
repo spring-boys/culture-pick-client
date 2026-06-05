@@ -6,6 +6,11 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/',
+      name: 'home',
+      component: () => import('@/views/HomeView.vue'),
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -18,6 +23,11 @@ const router = createRouter({
     {
       path: '/oauth/callback',
       component: () => import('@/views/OAuthCallbackView.vue'),
+    },
+    {
+      path: '/cultures/:id',
+      name: 'culture-detail',
+      component: () => import('@/views/CultureDetailView.vue'),
     },
     {
       path: '/chat-rooms/:chatRoomId',
