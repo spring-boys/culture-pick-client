@@ -60,6 +60,11 @@ function formatDate(date) {
   if (!date) return '-'
   return String(date).replace(/-/g, '.')
 }
+
+function goToChatRoom() {
+  if (!culture.value?.chatRoomId) return
+  router.push(`/chat-rooms/${culture.value.chatRoomId}`)
+}
 </script>
 
 <template>
@@ -134,7 +139,12 @@ function formatDate(date) {
           </table>
 
           <div class="button-row">
-            <button type="button" class="chat-button" disabled>채팅방 바로가기</button>
+            <button
+              type="button"
+              class="chat-button"
+              :disabled="!culture.chatRoomId"
+              @click="goToChatRoom"
+            >채팅방 바로가기</button>
           </div>
         </div>
       </section>
@@ -323,6 +333,19 @@ function formatDate(date) {
   color: #fff;
   cursor: not-allowed;
   opacity: 0.45;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.chat-button:not(:disabled) {
+  cursor: pointer;
+  opacity: 1;
+}
+
+.chat-button:hover:not(:disabled) {
+  background: #e85f2f;
+  transform: translateY(-1px);
 }
 
 /* Review section */
