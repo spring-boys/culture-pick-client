@@ -30,6 +30,12 @@ const router = createRouter({
       component: () => import('@/views/CultureDetailView.vue'),
     },
     {
+      path: '/mypage',
+      name: 'mypage',
+      component: () => import('@/views/MyPageView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/chat-rooms/:chatRoomId',
       name: 'chat-room',
       component: () => import('@/views/ChatRoomView.vue'),
