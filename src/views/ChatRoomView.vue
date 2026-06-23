@@ -18,6 +18,7 @@ const connected = ref(false)
 const errorMessage = ref('')
 const messageListRef = ref(null)
 const currentMemberId = ref(null)
+const cultureTitle = ref('')
 let chatSocket = null
 
 function isMyMessage(message) {
@@ -87,7 +88,8 @@ async function loadChatRoom() {
   try {
     const { data: myPage } = await getMyPage()
     currentMemberId.value = myPage.memberId
-    await joinChatRoom(chatRoomId.value)
+    const { data: chatRoom } = await joinChatRoom(chatRoomId.value)
+    cultureTitle.value = chatRoom.cultureTitle
     const { data } = await getChatMessages(chatRoomId.value)
     messages.value = data
     await scrollToBottom()
@@ -157,8 +159,7 @@ onBeforeUnmount(() => {
     <section class="chat-panel">
       <div class="chat-header">
         <div>
-          <h1>문화행사 채팅방 #{{ chatRoomId }}</h1>
-          <p>같은 문화행사에 관심 있는 사용자들과 실시간으로 정보를 공유합니다.</p>
+          <h1>{{ cultureTitle || '문화행사 채팅방' }}</h1>
         </div>
         <button class="secondary-button" type="button" @click="router.back()">이전 화면</button>
       </div>
