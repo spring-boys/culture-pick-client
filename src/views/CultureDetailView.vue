@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCultureDetail } from '@/services/culture'
 import { addBookmark, removeBookmark } from '@/services/bookmark'
@@ -8,6 +8,7 @@ import {
   createReview,
   updateReview,
   deleteReview,
+  getReviewSummary,
 } from '@/services/review'
 import { useAuthStore } from '@/stores/auth'
 
@@ -25,6 +26,15 @@ const reviewError = ref('')
 const reviewContent = ref('')
 const reviewSubmitting = ref(false)
 const editingReviewId = ref(null)
+const summaryText = ref('')
+const summaryLoading = ref(false)
+const summaryError = ref('')
+
+const reviewContainer = ref(null)
+const currentPage = ref(0)
+const hasNext = ref(false)
+const pageSize = ref(5)
+let resizeObserver = null
 
 async function fetchDetail() {
   try {
@@ -32,7 +42,6 @@ async function fetchDetail() {
     culture.value = data
     bookmarked.value = data.bookmarked
     bookmarkCount.value = data.bookmarkCount
-    fetchReviews(data.id)
   } catch {
     router.replace('/')
   } finally {
@@ -40,22 +49,50 @@ async function fetchDetail() {
   }
 }
 
-async function fetchReviews(cultureId = culture.value?.id) {
+// loading=false 후 DOM에 reviewContainer가 마운트되면 pageSize 계산 및 초기 리뷰 fetch
+watch(reviewContainer, (el) => {
+  if (!el) return
+  pageSize.value = Math.max(1, Math.floor((el.offsetWidth + 14) / (270 + 14)))
+  fetchReviews(culture.value?.id, 0)
+  if (resizeObserver) resizeObserver.disconnect()
+  resizeObserver = new ResizeObserver(computePageSize)
+  resizeObserver.observe(el)
+})
+
+async function fetchReviews(cultureId = culture.value?.id, page = currentPage.value) {
   if (!cultureId) return
 
   reviewLoading.value = true
   reviewError.value = ''
 
   try {
-    const { data } = await getCultureReviews(cultureId)
-    reviews.value = Array.isArray(data)
-      ? [...data].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-      : []
+    const { data } = await getCultureReviews(cultureId, page, pageSize.value)
+    reviews.value = Array.isArray(data.content) ? data.content : []
+    hasNext.value = data.hasNext ?? false
+    currentPage.value = data.currentPage ?? page
   } catch {
     reviewError.value = '리뷰를 불러오지 못했습니다.'
   } finally {
     reviewLoading.value = false
   }
+}
+
+function computePageSize() {
+  if (!reviewContainer.value) return
+  const containerWidth = reviewContainer.value.offsetWidth
+  const cardWidth = 270
+  const gap = 14
+  const computed = Math.max(1, Math.floor((containerWidth + gap) / (cardWidth + gap)))
+  if (computed !== pageSize.value) {
+    pageSize.value = computed
+    currentPage.value = 0
+    fetchReviews(culture.value?.id, 0)
+  }
+}
+
+async function goToPage(page) {
+  if (page < 0 || reviewLoading.value) return
+  await fetchReviews(culture.value?.id, page)
 }
 
 onMounted(() => {
@@ -165,6 +202,61 @@ async function removeReview(reviewId) {
   }
 }
 
+async function fetchSummary() {
+  if (summaryLoading.value) return
+
+  summaryLoading.value = true
+  summaryText.value = ''
+  summaryError.value = ''
+
+  try {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+    const headers = {}
+    if (authStore.accessToken) headers['Authorization'] = `Bearer ${authStore.accessToken}`
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/cultures/${culture.value.id}/reviews/summary/stream`,
+      { headers },
+    )
+
+    if (!response.ok) throw new Error()
+
+    summaryLoading.value = false
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          summaryText.value += line.slice(5)
+        }
+      }
+    }
+  } catch {
+    summaryError.value = 'AI 요약을 불러오지 못했습니다.'
+  } finally {
+    summaryLoading.value = false
+  }
+}
+
+function closeSummary() {
+  summaryText.value = ''
+  summaryError.value = ''
+}
+
+onUnmounted(() => {
+  if (resizeObserver) resizeObserver.disconnect()
+})
+
 function goToChatRoom() {
   if (!culture.value?.chatRoomId) return
   router.push(`/chat-rooms/${culture.value.chatRoomId}`)
@@ -256,12 +348,32 @@ function goToChatRoom() {
       <section class="review-section">
         <div class="section-head">
           <h2>사용자 리뷰</h2>
-          <button
-            type="button"
-            class="review-write-button"
-            :disabled="!authStore.isLoggedIn || reviewSubmitting"
-            @click="openReviewForm"
-          >리뷰 작성하기</button>
+          <div class="section-head-actions">
+            <button
+              type="button"
+              class="summary-button"
+              :disabled="summaryLoading"
+              @click="fetchSummary"
+            >
+              <span class="summary-icon">✦</span>
+              {{ summaryLoading ? '요약 중...' : 'AI 요약' }}
+            </button>
+            <button
+              type="button"
+              class="review-write-button"
+              :disabled="!authStore.isLoggedIn || reviewSubmitting"
+              @click="openReviewForm"
+            >리뷰 작성하기</button>
+          </div>
+        </div>
+
+        <div v-if="summaryText || summaryError" class="summary-box">
+          <div class="summary-box-head">
+            <span class="summary-box-label">✦ AI 리뷰 요약</span>
+            <button type="button" class="summary-close" @click="closeSummary">✕</button>
+          </div>
+          <p v-if="summaryError" class="summary-error">{{ summaryError }}</p>
+          <p v-else class="summary-text">{{ summaryText }}</p>
         </div>
 
         <form v-if="editingReviewId !== null" class="review-form" @submit.prevent="submitReview">
@@ -289,30 +401,47 @@ function goToChatRoom() {
         </form>
 
         <p v-if="reviewError" class="review-message error">{{ reviewError }}</p>
-        <p v-if="reviewLoading" class="review-message">리뷰를 불러오는 중...</p>
-        <p v-else-if="!reviewError && reviews.length === 0" class="review-message">아직 작성된 리뷰가 없습니다.</p>
-        <div v-else-if="reviews.length > 0" class="review-scroll">
-          <article v-for="review in reviews" :key="review.id" class="review-card">
-            <div class="review-card-head">
-              <strong>{{ review.memberNickname || '사용자' }}</strong>
-            </div>
-            <p class="review-content">{{ review.content }}</p>
-            <div class="review-card-foot">
-              <time>{{ formatReviewDate(review.createdAt) }}</time>
-              <div v-if="review.mine === true" class="review-card-actions">
-                <button
-                  type="button"
-                  :disabled="reviewSubmitting"
-                  @click="editReview(review)"
-                >수정</button>
-                <button
-                  type="button"
-                  :disabled="reviewSubmitting"
-                  @click="removeReview(review.id)"
-                >삭제</button>
-              </div>
-            </div>
-          </article>
+
+        <div class="review-paginator">
+          <button
+            class="nav-btn"
+            :disabled="currentPage === 0 || reviewLoading"
+            @click="goToPage(currentPage - 1)"
+          >‹</button>
+
+          <div ref="reviewContainer" class="review-scroll" :class="{ 'is-loading': reviewLoading }">
+            <p v-if="reviewLoading && reviews.length === 0" class="review-message">리뷰를 불러오는 중...</p>
+            <p v-else-if="!reviewLoading && !reviewError && reviews.length === 0" class="review-message">아직 작성된 리뷰가 없습니다.</p>
+            <template v-else-if="reviews.length > 0">
+              <article v-for="review in reviews" :key="review.id" class="review-card">
+                <div class="review-card-head">
+                  <strong>{{ review.memberNickname || '사용자' }}</strong>
+                </div>
+                <p class="review-content">{{ review.content }}</p>
+                <div class="review-card-foot">
+                  <time>{{ formatReviewDate(review.createdAt) }}</time>
+                  <div v-if="review.mine === true" class="review-card-actions">
+                    <button
+                      type="button"
+                      :disabled="reviewSubmitting"
+                      @click="editReview(review)"
+                    >수정</button>
+                    <button
+                      type="button"
+                      :disabled="reviewSubmitting"
+                      @click="removeReview(review.id)"
+                    >삭제</button>
+                  </div>
+                </div>
+              </article>
+            </template>
+          </div>
+
+          <button
+            class="nav-btn"
+            :disabled="!hasNext || reviewLoading"
+            @click="goToPage(currentPage + 1)"
+          >›</button>
         </div>
       </section>
     </template>
@@ -632,12 +761,50 @@ function goToChatRoom() {
   color: var(--color-primary);
 }
 
+.review-paginator {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.nav-btn {
+  flex: 0 0 32px;
+  height: 32px;
+  align-self: center;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-card);
+  color: var(--color-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  padding: 0;
+}
+
+.nav-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .review-scroll {
+  flex: 1;
   display: flex;
   gap: 14px;
-  overflow-x: auto;
-  padding-bottom: 10px;
-  margin-top: 18px;
+  min-width: 0;
+  overflow: hidden;
+  transition: opacity 0.15s;
+}
+
+.review-scroll.is-loading {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 .review-card {
@@ -674,6 +841,92 @@ function goToChatRoom() {
 .review-card-actions button:hover:not(:disabled),
 .review-cancel-button:hover:not(:disabled) {
   border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.section-head-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.summary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.summary-button:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.summary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.summary-icon {
+  font-size: 11px;
+}
+
+.summary-box {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+}
+
+.summary-box-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.summary-box-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.2px;
+}
+
+.summary-close {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.summary-close:hover {
+  color: var(--color-primary);
+}
+
+.summary-text {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--color-text, #333);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.summary-error {
+  font-size: 14px;
   color: var(--color-primary);
 }
 </style>

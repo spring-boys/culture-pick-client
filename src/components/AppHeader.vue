@@ -18,7 +18,7 @@ async function logout() {
 
 <template>
   <header class="app-header">
-    <RouterLink class="brand" to="/">CulturePick</RouterLink>
+    <RouterLink class="brand" to="/">Culture Pick</RouterLink>
 
     <nav class="nav-right">
       <RouterLink class="nav-link" to="/" exact-active-class="active">홈</RouterLink>
